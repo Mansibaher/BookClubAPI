@@ -12,5 +12,7 @@ package com.example.models
 data class ClubRequest(
     val name: String,
     val description: String,
-    val currentBook: String
+    val currentBook: String,
+    val members: List<String>? = null
+
 )

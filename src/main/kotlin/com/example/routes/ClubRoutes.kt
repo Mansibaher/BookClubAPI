@@ -48,12 +48,17 @@ fun Route.clubRoutes() {
                     val request = call.receive<ClubRequest>()
                     val clubId = UUID.randomUUID().toString()
 
+                    // Safely handle nullable members list and ensure current user is added
+                    val members = request.members.orEmpty().toMutableSet().apply {
+                        add(userEmail)
+                    }.toMutableList()
+
                     val club = Club(
                         id = clubId,
                         name = request.name,
                         description = request.description,
                         createdBy = userEmail,
-                        members = mutableListOf(userEmail),
+                        members = members,
                         currentBook = request.currentBook
                     )
 
@@ -61,6 +66,8 @@ fun Route.clubRoutes() {
                     club
                 }
             }
+
+
 
             // POST /clubs/{id}/join — add user to club members
             post("{id}/join") {

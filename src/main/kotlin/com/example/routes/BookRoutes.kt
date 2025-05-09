@@ -11,6 +11,22 @@ import io.ktor.server.application.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 
+/**
+ * Defines routes for interacting with external book search APIs.
+ *
+ * Route:
+ *   GET /books/search?query=your_query
+ *     - Calls the Google Books API to fetch book information based on the query.
+ *     - Returns a list of simplified Book models.
+ *
+ * Example request:
+ *   GET /books/search?query=Harry+Potter
+ *
+ * Returns:
+ *   - 200 OK with list of books if successful.
+ *   - 400 Bad Request if query parameter is missing.
+ *   - 500 Internal Server Error if the external API call fails.
+ */
 fun Route.bookRoutes() {
     route("/books") {
         get("/search") {
@@ -22,7 +38,7 @@ fun Route.bookRoutes() {
                 )
                 return@get
             }
-
+            // Call Google Books API
             try {
                 val response: HttpResponse = client.get("https://www.googleapis.com/books/v1/volumes") {
                     url {
@@ -30,7 +46,7 @@ fun Route.bookRoutes() {
                         parameters.append("maxResults", "10")
                     }
                 }
-
+                // Parse and convert each book entry to our Book model
                 val rawJson = response.bodyAsText()
                 val json = JsonParser.parseString(rawJson).asJsonObject
                 val items = json.getAsJsonArray("items")

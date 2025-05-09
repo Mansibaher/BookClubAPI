@@ -22,12 +22,23 @@ import com.example.routes.clubRoutes
 import com.example.routes.bookRoutes
 import com.example.routes.threadRoutes
 
+/**
+ * Main entry point of the Book Club API application.
+ * Starts the Ktor server using the Netty engine.
+ */
 fun main() {
     embeddedServer(Netty, port = 8080, host = "0.0.0.0") {
         module()
     }.start(wait = true)
 }
 
+/**
+ * Configures the main application module.
+ * - Initializes Firebase
+ * - Sets up JWT-based authentication
+ * - Installs JSON serialization
+ * - Registers all routing endpoints
+ */
 fun Application.module() {
     install(ContentNegotiation) {
         gson()
@@ -70,8 +81,8 @@ fun Application.module() {
         // ✅ Public routes
         authRoutes()
         clubRoutes()
-        bookRoutes() // ✅ Added bookRoutes for Google Books API integration
-        threadRoutes() // ✅ Added threadRoutes for discussion threads
+        bookRoutes()
+        threadRoutes()
 
         // ✅ Protected routes
         authenticate("auth-jwt") {

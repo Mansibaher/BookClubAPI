@@ -3,6 +3,8 @@ package com.example.routes
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import com.example.models.ApiResponse
+import com.example.models.LoginRequest
+import com.example.models.SignupRequest
 import com.google.firebase.auth.FirebaseAuth
 import io.ktor.http.*
 import io.ktor.server.application.*
@@ -10,14 +12,20 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 
-data class SignupRequest(val email: String, val password: String)
-data class LoginRequest(val email: String, val password: String)
+private val jwtSecret = "super_secret_key"
 
-private val jwtSecret = "super_secret_key" // For demo only. Use environment variable in production.
-
+/**
+ * Defines authentication routes for user signup and login.
+ *
+ * Routes:
+ *  - POST /signup: Creates a new Firebase user account.
+ *  - POST /login: Generates a JWT token using a Firebase custom token.
+ *
+ * Responses are wrapped in a standard ApiResponse<T> format.
+ */
 fun Route.authRoutes() {
-    println("✅ /signup and /login routes registered")
 
+    // Route to handle user registration
     route("/signup") {
         post {
             println("📩 Received POST /signup request")
@@ -36,14 +44,16 @@ fun Route.authRoutes() {
         }
     }
 
+    // Route to handle login and JWT issuance
     route("/login") {
         post {
             println("🔑 Received POST /login request")
             val request = call.receive<LoginRequest>()
             try {
+                // Firebase custom token creation (used for client-side Firebase auth)
                 val firebaseToken = FirebaseAuth.getInstance()
                     .createCustomToken(request.email)
-
+                // Generate backend JWT for authenticated access to server endpoints
                 val jwt = JWT.create()
                     .withIssuer("bookclub")
                     .withClaim("email", request.email)

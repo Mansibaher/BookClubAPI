@@ -13,13 +13,25 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import java.util.*
 
+/**
+ * Defines all routes related to book club management.
+ *
+ * Routes:
+ * - GET /clubs: List all book clubs.
+ * - POST /clubs: Create a new club (requires auth).
+ * - POST /clubs/{id}/join: Join an existing club (requires auth).
+ * - DELETE /clubs/{id}/leave: Leave a club (requires auth).
+ * - DELETE /clubs/{id}: Delete a club if user is creator (requires auth).
+ * - PATCH /clubs/{id}/currentBook: Update the club's current book.
+ * - DELETE /clubs/{id}/currentBook: Remove the club's current book.
+ */
 fun Route.clubRoutes() {
     route("/clubs") {
 
-        // Lambda assigned to variable ✅
+        // Utility to return consistent message responses using Lambda
         val formatMessage: (String) -> Map<String, String> = { msg -> mapOf("message" to msg) }
 
-        // GET all clubs ✅
+        // GET /clubs — fetch all clubs (public)
         get {
             respondSafely(call) {
                 val snapshot = FirebaseService.firestoreDb.collection("clubs").get().get()
@@ -29,7 +41,7 @@ fun Route.clubRoutes() {
 
         authenticate("auth-jwt") {
 
-            // POST /clubs ✅
+            // POST /clubs — create a new club
             post {
                 respondSafely(call) {
                     val userEmail = call.principal<JWTPrincipal>()!!.payload.getClaim("email").asString()
@@ -50,7 +62,7 @@ fun Route.clubRoutes() {
                 }
             }
 
-            // POST /clubs/{id}/join ✅
+            // POST /clubs/{id}/join — add user to club members
             post("{id}/join") {
                 respondSafely(call) {
                     val id = call.parameters["id"] ?: throw IllegalArgumentException("Missing club ID")
@@ -69,7 +81,7 @@ fun Route.clubRoutes() {
                 }
             }
 
-            // DELETE /clubs/{id}/leave ✅
+            // DELETE /clubs/{id}/leave — remove user from club members
             delete("{id}/leave") {
                 respondSafely(call) {
                     val id = call.parameters["id"] ?: throw IllegalArgumentException("Missing club ID")
@@ -93,7 +105,7 @@ fun Route.clubRoutes() {
                 }
             }
 
-            // DELETE /clubs/{id} ✅
+            // DELETE /clubs/{id} — delete club (only by creator)
             delete("{id}") {
                 respondSafely(call) {
                     val id = call.parameters["id"] ?: throw IllegalArgumentException("Missing club ID")
@@ -113,7 +125,7 @@ fun Route.clubRoutes() {
             }
         }
 
-        // PATCH /clubs/{id}/currentBook ✅
+        // PATCH /clubs/{id}/currentBook — update current book (publicly callable)
         patch("{id}/currentBook") {
             respondSafely(call) {
                 val id = call.parameters["id"] ?: throw IllegalArgumentException("Missing club ID")
@@ -135,7 +147,7 @@ fun Route.clubRoutes() {
             }
         }
 
-        // DELETE /clubs/{id}/currentBook ✅
+        // DELETE /clubs/{id}/currentBook — remove current book
         delete("{id}/currentBook") {
             respondSafely(call) {
                 val id = call.parameters["id"] ?: throw IllegalArgumentException("Missing club ID")

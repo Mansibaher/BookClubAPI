@@ -10,6 +10,17 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 
+/**
+ * Defines all routes related to discussion threads and comments within a book club.
+ *
+ * Endpoint structure:
+ * - GET /clubs/{clubId}/threads → Get all threads for a club.
+ * - POST /clubs/{clubId}/threads → Create a new thread (auth required).
+ * - GET /clubs/{clubId}/threads/{threadId} → Get a specific thread.
+ * - DELETE /clubs/{clubId}/threads/{threadId} → Delete a thread (auth required, only creator).
+ * - POST /clubs/{clubId}/threads/{threadId}/comments → Add comment to thread (auth required).
+ * - DELETE /clubs/{clubId}/threads/{threadId}/comments/{commentId} → Delete comment (auth required, only creator).
+ */
 fun Route.threadRoutes() {
     route("/clubs/{clubId}/threads") {
 

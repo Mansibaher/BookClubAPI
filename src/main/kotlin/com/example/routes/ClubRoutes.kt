@@ -1,9 +1,8 @@
 package com.example.routes
 
+import com.example.models.*
 import com.example.service.FirebaseService
-import com.example.models.Club
-import com.example.models.ClubRequest
-import com.example.models.CurrentBookRequest
+import com.google.cloud.firestore.FieldValue
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
@@ -13,28 +12,21 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import java.util.*
 
-val clubs = mutableListOf<Club>()
-
 fun Route.clubRoutes() {
     route("/clubs") {
 
-        // Public: List all clubs from Firestore
+        // Public: List all clubs
         get {
             val db = FirebaseService.firestoreDb
-            val snapshot = db.collection("clubs").get().get()  // blocking get()
+            val snapshot = db.collection("clubs").get().get()
             val clubs = snapshot.documents.mapNotNull { it.toObject(Club::class.java) }
-            call.respond(clubs)
+            call.respond(ApiResponse(success = true, data = clubs))
         }
 
-        // Authenticated: Create + Join + Leave + Delete
         authenticate("auth-jwt") {
 
-            // ✅ Create a club
-            // ✅ Create a club and store in Firestore
             post {
-                val principal = call.principal<JWTPrincipal>()
-                val userEmail = principal!!.payload.getClaim("email").asString()
-
+                val userEmail = call.principal<JWTPrincipal>()!!.payload.getClaim("email").asString()
                 val request = call.receive<ClubRequest>()
                 val clubId = UUID.randomUUID().toString()
 
@@ -47,198 +39,129 @@ fun Route.clubRoutes() {
                     currentBook = request.currentBook
                 )
 
-                val db = FirebaseService.firestoreDb
-                db.collection("clubs").document(clubId).set(club)
-
-                call.respond(mapOf("message" to "Club created!", "club" to club))
+                FirebaseService.firestoreDb.collection("clubs").document(clubId).set(club)
+                call.respond(ApiResponse(success = true, data = club))
             }
 
-            // ✅ Join a club
             post("{id}/join") {
                 val id = call.parameters["id"]
                 val userEmail = call.principal<JWTPrincipal>()!!.payload.getClaim("email").asString()
 
-                if (id == null) {
-                    return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Missing club ID"))
+                if (id.isNullOrBlank()) {
+                    return@post call.respond(HttpStatusCode.BadRequest, ApiResponse<Unit>(false, error = "Missing club ID"))
                 }
 
                 val db = FirebaseService.firestoreDb
                 val docRef = db.collection("clubs").document(id)
-
                 val snapshot = docRef.get().get()
 
-                if (!snapshot.exists()) {
-                    return@post call.respond(HttpStatusCode.NotFound, mapOf("error" to "Club not found"))
-                }
-
                 val club = snapshot.toObject(Club::class.java)
-
-                if (club == null) {
-                    return@post call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Failed to load club data"))
-                }
+                    ?: return@post call.respond(HttpStatusCode.InternalServerError, ApiResponse<Unit>(false, error = "Failed to load club data"))
 
                 if (club.members.contains(userEmail)) {
-                    return@post call.respond(mapOf("message" to "Already a member"))
+                    return@post call.respond(ApiResponse(success = true, data = mapOf("message" to "Already a member")))
                 }
 
-                // ✅ Use Firestore's atomic arrayUnion to avoid race conditions
-                docRef.update("members", com.google.cloud.firestore.FieldValue.arrayUnion(userEmail))
-
-                call.respond(mapOf("message" to "Joined club!", "clubId" to club.id))
+                docRef.update("members", FieldValue.arrayUnion(userEmail))
+                call.respond(ApiResponse(success = true, data = mapOf("message" to "Joined club!", "clubId" to club.id)))
             }
 
-
-            // ✅ Leave a club
             delete("{id}/leave") {
                 val id = call.parameters["id"]
                 val userEmail = call.principal<JWTPrincipal>()!!.payload.getClaim("email").asString()
 
-                if (id == null) {
-                    return@delete call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Missing club ID"))
+                if (id.isNullOrBlank()) {
+                    return@delete call.respond(HttpStatusCode.BadRequest, ApiResponse<Unit>(false, error = "Missing club ID"))
                 }
 
-                val db = FirebaseService.firestoreDb
-                val docRef = db.collection("clubs").document(id)
-
+                val docRef = FirebaseService.firestoreDb.collection("clubs").document(id)
                 val snapshot = docRef.get().get()
-
-                if (!snapshot.exists()) {
-                    return@delete call.respond(HttpStatusCode.NotFound, mapOf("error" to "Club not found"))
-                }
-
                 val club = snapshot.toObject(Club::class.java)
-
-                if (club == null) {
-                    return@delete call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Failed to parse club data"))
-                }
+                    ?: return@delete call.respond(HttpStatusCode.InternalServerError, ApiResponse<Unit>(false, error = "Failed to parse club data"))
 
                 if (!club.members.contains(userEmail)) {
-                    return@delete call.respond(mapOf("message" to "You are not a member of this club"))
+                    return@delete call.respond(ApiResponse(success = true, data = mapOf("message" to "You are not a member of this club")))
                 }
 
-                // Remove user from members list and update Firestore
                 val updatedMembers = club.members.toMutableList().apply { remove(userEmail) }
-
                 docRef.update("members", updatedMembers)
-                call.respond(mapOf("message" to "Left the club", "clubId" to club.id))
+                call.respond(ApiResponse(success = true, data = mapOf("message" to "Left the club", "clubId" to club.id)))
             }
 
-
-            // ✅ Delete a club (only creator can)
             delete("{id}") {
                 val id = call.parameters["id"]
                 val userEmail = call.principal<JWTPrincipal>()!!.payload.getClaim("email").asString()
 
-                if (id == null) {
-                    return@delete call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Missing club ID"))
+                if (id.isNullOrBlank()) {
+                    return@delete call.respond(HttpStatusCode.BadRequest, ApiResponse<Unit>(false, error = "Missing club ID"))
                 }
 
-                val db = FirebaseService.firestoreDb
-                val docRef = db.collection("clubs").document(id)
-
+                val docRef = FirebaseService.firestoreDb.collection("clubs").document(id)
                 val snapshot = docRef.get().get()
-
-                if (!snapshot.exists()) {
-                    return@delete call.respond(HttpStatusCode.NotFound, mapOf("error" to "Club not found"))
-                }
-
                 val club = snapshot.toObject(Club::class.java)
+                    ?: return@delete call.respond(HttpStatusCode.NotFound, ApiResponse<Unit>(false, error = "Club not found"))
 
-                if (club == null || club.createdBy != userEmail) {
-                    return@delete call.respond(HttpStatusCode.Forbidden, mapOf("error" to "You are not authorized to delete this club"))
+                if (club.createdBy != userEmail) {
+                    return@delete call.respond(HttpStatusCode.Forbidden, ApiResponse<Unit>(false, error = "Not authorized to delete this club"))
                 }
 
                 docRef.delete()
-                call.respond(mapOf("message" to "Club deleted!", "deletedClubId" to id))
+                call.respond(ApiResponse(success = true, data = mapOf("message" to "Club deleted!", "deletedClubId" to id)))
             }
-
         }
 
         patch("{id}/currentBook") {
             val id = call.parameters["id"]
-            print(id)
             val userEmail = call.principal<JWTPrincipal>()?.payload?.getClaim("email")?.asString()
 
             if (id.isNullOrBlank()) {
-                return@patch call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Missing club ID"))
+                return@patch call.respond(HttpStatusCode.BadRequest, ApiResponse<Unit>(false, error = "Missing club ID"))
             }
 
-            val db = FirebaseService.firestoreDb
-            val docRef = db.collection("clubs").document(id)
-
+            val docRef = FirebaseService.firestoreDb.collection("clubs").document(id)
             val snapshot = try {
                 docRef.get().get()
             } catch (e: Exception) {
-                return@patch call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Failed to fetch club: ${e.message}"))
-            }
-
-            if (!snapshot.exists()) {
-                return@patch call.respond(HttpStatusCode.NotFound, mapOf("error" to "Club not found"))
+                return@patch call.respond(HttpStatusCode.InternalServerError, ApiResponse<Unit>(false, error = "Failed to fetch club: ${e.message}"))
             }
 
             val club = snapshot.toObject(Club::class.java)
-
-            if (club == null) {
-                return@patch call.respond(HttpStatusCode.Forbidden, mapOf("error" to "You must be a member to update the current book"))
-            }
+                ?: return@patch call.respond(HttpStatusCode.NotFound, ApiResponse<Unit>(false, error = "Club not found"))
 
             val request = try {
                 call.receive<CurrentBookRequest>()
             } catch (e: Exception) {
-                return@patch call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid request body: ${e.message}"))
+                return@patch call.respond(HttpStatusCode.BadRequest, ApiResponse<Unit>(false, error = "Invalid request body: ${e.message}"))
             }
 
             if (request.currentBook.isBlank()) {
-                return@patch call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Current book must not be blank"))
+                return@patch call.respond(HttpStatusCode.BadRequest, ApiResponse<Unit>(false, error = "Current book must not be blank"))
             }
 
-            try {
-                docRef.update("currentBook", request.currentBook)
-            } catch (e: Exception) {
-                return@patch call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Failed to update book: ${e.message}"))
-            }
-
-            call.respond(mapOf("message" to "Current book updated!", "clubId" to club.id, "currentBook" to request.currentBook))
+            docRef.update("currentBook", request.currentBook)
+            call.respond(ApiResponse(success = true, data = mapOf("message" to "Current book updated!", "clubId" to club.id, "currentBook" to request.currentBook)))
         }
 
-        // ✅ Delete currentBook from a club
         delete("{id}/currentBook") {
             val id = call.parameters["id"]
             val userEmail = call.principal<JWTPrincipal>()?.payload?.getClaim("email")?.asString()
 
             if (id.isNullOrBlank()) {
-                return@delete call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Missing club ID"))
+                return@delete call.respond(HttpStatusCode.BadRequest, ApiResponse<Unit>(false, error = "Missing club ID"))
             }
 
-            val db = FirebaseService.firestoreDb
-            val docRef = db.collection("clubs").document(id)
-
+            val docRef = FirebaseService.firestoreDb.collection("clubs").document(id)
             val snapshot = try {
                 docRef.get().get()
             } catch (e: Exception) {
-                return@delete call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Failed to fetch club: ${e.message}"))
-            }
-
-            if (!snapshot.exists()) {
-                return@delete call.respond(HttpStatusCode.NotFound, mapOf("error" to "Club not found"))
+                return@delete call.respond(HttpStatusCode.InternalServerError, ApiResponse<Unit>(false, error = "Failed to fetch club: ${e.message}"))
             }
 
             val club = snapshot.toObject(Club::class.java)
+                ?: return@delete call.respond(HttpStatusCode.NotFound, ApiResponse<Unit>(false, error = "Club not found"))
 
-            if (club == null) {
-                return@delete call.respond(HttpStatusCode.Forbidden, mapOf("error" to "You must be a member to delete the current book"))
-            }
-
-            try {
-                docRef.update("currentBook", com.google.cloud.firestore.FieldValue.delete())
-            } catch (e: Exception) {
-                return@delete call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Failed to delete current book: ${e.message}"))
-            }
-
-            call.respond(mapOf("message" to "Current book removed from club", "clubId" to id))
+            docRef.update("currentBook", FieldValue.delete())
+            call.respond(ApiResponse(success = true, data = mapOf("message" to "Current book removed from club", "clubId" to id)))
         }
-
-
-
     }
 }

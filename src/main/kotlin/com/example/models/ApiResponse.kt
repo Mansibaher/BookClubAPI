@@ -1,0 +1,7 @@
+package com.example.models
+
+data class ApiResponse<T>(
+    val success: Boolean,
+    val data: T? = null,
+    val error: String? = null
+)

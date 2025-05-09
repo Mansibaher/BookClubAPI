@@ -1,10 +1,7 @@
 package com.example.routes
 
+import com.example.models.*
 import com.example.service.FirebaseService
-import com.example.models.Thread
-import com.example.models.ThreadRequest
-import com.example.models.Comment
-import com.example.models.CommentRequest
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
@@ -15,43 +12,35 @@ import io.ktor.server.routing.*
 
 fun Route.threadRoutes() {
     route("/clubs/{clubId}/threads") {
+
         // Get all threads for a club
         get {
             val clubId = call.parameters["clubId"]
             if (clubId.isNullOrBlank()) {
-                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Missing club ID"))
-                return@get
+                return@get call.respond(HttpStatusCode.BadRequest, ApiResponse<Unit>(false, error = "Missing club ID"))
             }
 
             try {
                 val db = FirebaseService.firestoreDb
-                // First verify club exists
                 val clubDoc = db.collection("clubs").document(clubId).get().get()
                 if (!clubDoc.exists()) {
-                    call.respond(HttpStatusCode.NotFound, mapOf("error" to "Club not found"))
-                    return@get
+                    return@get call.respond(HttpStatusCode.NotFound, ApiResponse<Unit>(false, error = "Club not found"))
                 }
 
-                val threadsSnapshot = db.collection("clubs")
-                    .document(clubId)
-                    .collection("threads")
-                    .get()
-                    .get()
-
+                val threadsSnapshot = db.collection("clubs").document(clubId).collection("threads").get().get()
                 val threads = threadsSnapshot.documents.mapNotNull { it.toObject(Thread::class.java) }
-                call.respond(threads)
+                call.respond(ApiResponse(success = true, data = threads))
             } catch (e: Exception) {
-                call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Failed to fetch threads: ${e.message}"))
+                call.respond(HttpStatusCode.InternalServerError, ApiResponse<Unit>(false, error = "Failed to fetch threads: ${e.message}"))
             }
         }
 
-        // Create a new thread (authenticated)
+        // Create thread
         authenticate("auth-jwt") {
             post {
                 val clubId = call.parameters["clubId"]
                 if (clubId.isNullOrBlank()) {
-                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Missing club ID"))
-                    return@post
+                    return@post call.respond(HttpStatusCode.BadRequest, ApiResponse<Unit>(false, error = "Missing club ID"))
                 }
 
                 val userEmail = call.principal<JWTPrincipal>()!!.payload.getClaim("email").asString()
@@ -59,72 +48,51 @@ fun Route.threadRoutes() {
 
                 try {
                     val db = FirebaseService.firestoreDb
-                    // First verify club exists
                     val clubDoc = db.collection("clubs").document(clubId).get().get()
                     if (!clubDoc.exists()) {
-                        call.respond(HttpStatusCode.NotFound, mapOf("error" to "Club not found"))
-                        return@post
+                        return@post call.respond(HttpStatusCode.NotFound, ApiResponse<Unit>(false, error = "Club not found"))
                     }
 
-                    val threadRef = db.collection("clubs")
-                        .document(clubId)
-                        .collection("threads")
-                        .document()
+                    val threadRef = db.collection("clubs").document(clubId).collection("threads").document()
+                    val thread = Thread(threadRef.id, clubId, request.title, request.content, userEmail)
 
-                    val thread = Thread(
-                        id = threadRef.id,
-                        clubId = clubId,
-                        title = request.title,
-                        content = request.content,
-                        createdBy = userEmail
-                    )
-
-                    threadRef.set(thread).get() // Wait for the write to complete
-                    call.respond(mapOf("message" to "Thread created!", "thread" to thread))
+                    threadRef.set(thread).get()
+                    call.respond(ApiResponse(success = true, data = thread))
                 } catch (e: Exception) {
-                    call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Failed to create thread: ${e.message}"))
+                    call.respond(HttpStatusCode.InternalServerError, ApiResponse<Unit>(false, error = "Failed to create thread: ${e.message}"))
                 }
             }
         }
 
-        // Get a specific thread
+        // Get specific thread
         get("{threadId}") {
             val clubId = call.parameters["clubId"]
             val threadId = call.parameters["threadId"]
-            
+
             if (clubId.isNullOrBlank() || threadId.isNullOrBlank()) {
-                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Missing club ID or thread ID"))
-                return@get
+                return@get call.respond(HttpStatusCode.BadRequest, ApiResponse<Unit>(false, error = "Missing club ID or thread ID"))
             }
 
             try {
                 val db = FirebaseService.firestoreDb
-                // First verify club exists
                 val clubDoc = db.collection("clubs").document(clubId).get().get()
                 if (!clubDoc.exists()) {
-                    call.respond(HttpStatusCode.NotFound, mapOf("error" to "Club not found"))
-                    return@get
+                    return@get call.respond(HttpStatusCode.NotFound, ApiResponse<Unit>(false, error = "Club not found"))
                 }
 
-                val threadDoc = db.collection("clubs")
-                    .document(clubId)
-                    .collection("threads")
-                    .document(threadId)
-                    .get()
-                    .get()
-
+                val threadDoc = db.collection("clubs").document(clubId).collection("threads").document(threadId).get().get()
                 if (threadDoc.exists()) {
                     val thread = threadDoc.toObject(Thread::class.java)
-                    call.respond(thread!!)
+                    call.respond(ApiResponse(success = true, data = thread))
                 } else {
-                    call.respond(HttpStatusCode.NotFound, mapOf("error" to "Thread not found"))
+                    call.respond(HttpStatusCode.NotFound, ApiResponse<Unit>(false, error = "Thread not found"))
                 }
             } catch (e: Exception) {
-                call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Failed to fetch thread: ${e.message}"))
+                call.respond(HttpStatusCode.InternalServerError, ApiResponse<Unit>(false, error = "Failed to fetch thread: ${e.message}"))
             }
         }
 
-        // Delete a thread (authenticated, only creator can delete)
+        // Delete thread (creator only)
         authenticate("auth-jwt") {
             delete("{threadId}") {
                 val clubId = call.parameters["clubId"]
@@ -132,49 +100,40 @@ fun Route.threadRoutes() {
                 val userEmail = call.principal<JWTPrincipal>()!!.payload.getClaim("email").asString()
 
                 if (clubId.isNullOrBlank() || threadId.isNullOrBlank()) {
-                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Missing club ID or thread ID"))
-                    return@delete
+                    return@delete call.respond(HttpStatusCode.BadRequest, ApiResponse<Unit>(false, error = "Missing club ID or thread ID"))
                 }
 
                 try {
                     val db = FirebaseService.firestoreDb
-                    // First verify club exists
                     val clubDoc = db.collection("clubs").document(clubId).get().get()
                     if (!clubDoc.exists()) {
-                        call.respond(HttpStatusCode.NotFound, mapOf("error" to "Club not found"))
-                        return@delete
+                        return@delete call.respond(HttpStatusCode.NotFound, ApiResponse<Unit>(false, error = "Club not found"))
                     }
 
-                    val threadRef = db.collection("clubs")
-                        .document(clubId)
-                        .collection("threads")
-                        .document(threadId)
-
+                    val threadRef = db.collection("clubs").document(clubId).collection("threads").document(threadId)
                     val threadDoc = threadRef.get().get()
                     if (threadDoc.exists()) {
                         val thread = threadDoc.toObject(Thread::class.java)
                         if (thread?.createdBy == userEmail) {
-                            // Delete all comments first
-                            val commentsSnapshot = threadRef.collection("comments").get().get()
-                            for (comment in commentsSnapshot.documents) {
-                                comment.reference.delete().get() // Wait for each delete to complete
+                            val comments = threadRef.collection("comments").get().get()
+                            for (comment in comments.documents) {
+                                comment.reference.delete().get()
                             }
-                            // Delete the thread
-                            threadRef.delete().get() // Wait for delete to complete
-                            call.respond(mapOf("message" to "Thread deleted!", "deletedThreadId" to threadId))
+                            threadRef.delete().get()
+                            call.respond(ApiResponse(success = true, data = mapOf("message" to "Thread deleted!", "deletedThreadId" to threadId)))
                         } else {
-                            call.respond(HttpStatusCode.Forbidden, mapOf("error" to "You are not authorized to delete this thread"))
+                            call.respond(HttpStatusCode.Forbidden, ApiResponse<Unit>(false, error = "Not authorized to delete this thread"))
                         }
                     } else {
-                        call.respond(HttpStatusCode.NotFound, mapOf("error" to "Thread not found"))
+                        call.respond(HttpStatusCode.NotFound, ApiResponse<Unit>(false, error = "Thread not found"))
                     }
                 } catch (e: Exception) {
-                    call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Failed to delete thread: ${e.message}"))
+                    call.respond(HttpStatusCode.InternalServerError, ApiResponse<Unit>(false, error = "Failed to delete thread: ${e.message}"))
                 }
             }
         }
 
-        // Add a comment to a thread (authenticated)
+        // Add a comment
         authenticate("auth-jwt") {
             post("{threadId}/comments") {
                 val clubId = call.parameters["clubId"]
@@ -183,47 +142,34 @@ fun Route.threadRoutes() {
                 val request = call.receive<CommentRequest>()
 
                 if (clubId.isNullOrBlank() || threadId.isNullOrBlank()) {
-                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Missing club ID or thread ID"))
-                    return@post
+                    return@post call.respond(HttpStatusCode.BadRequest, ApiResponse<Unit>(false, error = "Missing club ID or thread ID"))
                 }
 
                 try {
                     val db = FirebaseService.firestoreDb
-                    // First verify club exists
                     val clubDoc = db.collection("clubs").document(clubId).get().get()
                     if (!clubDoc.exists()) {
-                        call.respond(HttpStatusCode.NotFound, mapOf("error" to "Club not found"))
-                        return@post
+                        return@post call.respond(HttpStatusCode.NotFound, ApiResponse<Unit>(false, error = "Club not found"))
                     }
 
-                    val threadRef = db.collection("clubs")
-                        .document(clubId)
-                        .collection("threads")
-                        .document(threadId)
-
-                    // Verify thread exists
+                    val threadRef = db.collection("clubs").document(clubId).collection("threads").document(threadId)
                     val threadDoc = threadRef.get().get()
                     if (!threadDoc.exists()) {
-                        call.respond(HttpStatusCode.NotFound, mapOf("error" to "Thread not found"))
-                        return@post
+                        return@post call.respond(HttpStatusCode.NotFound, ApiResponse<Unit>(false, error = "Thread not found"))
                     }
 
                     val commentRef = threadRef.collection("comments").document()
-                    val comment = Comment(
-                        id = commentRef.id,
-                        content = request.content,
-                        createdBy = userEmail
-                    )
+                    val comment = Comment(commentRef.id, request.content, userEmail)
+                    commentRef.set(comment).get()
 
-                    commentRef.set(comment).get() // Wait for the write to complete
-                    call.respond(mapOf("message" to "Comment added!", "comment" to comment))
+                    call.respond(ApiResponse(success = true, data = comment))
                 } catch (e: Exception) {
-                    call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Failed to add comment: ${e.message}"))
+                    call.respond(HttpStatusCode.InternalServerError, ApiResponse<Unit>(false, error = "Failed to add comment: ${e.message}"))
                 }
             }
         }
 
-        // Delete a comment (authenticated, only comment creator can delete)
+        // Delete comment
         authenticate("auth-jwt") {
             delete("{threadId}/comments/{commentId}") {
                 val clubId = call.parameters["clubId"]
@@ -232,17 +178,14 @@ fun Route.threadRoutes() {
                 val userEmail = call.principal<JWTPrincipal>()!!.payload.getClaim("email").asString()
 
                 if (clubId.isNullOrBlank() || threadId.isNullOrBlank() || commentId.isNullOrBlank()) {
-                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Missing club ID, thread ID, or comment ID"))
-                    return@delete
+                    return@delete call.respond(HttpStatusCode.BadRequest, ApiResponse<Unit>(false, error = "Missing club ID, thread ID, or comment ID"))
                 }
 
                 try {
                     val db = FirebaseService.firestoreDb
-                    // First verify club exists
                     val clubDoc = db.collection("clubs").document(clubId).get().get()
                     if (!clubDoc.exists()) {
-                        call.respond(HttpStatusCode.NotFound, mapOf("error" to "Club not found"))
-                        return@delete
+                        return@delete call.respond(HttpStatusCode.NotFound, ApiResponse<Unit>(false, error = "Club not found"))
                     }
 
                     val commentRef = db.collection("clubs")
@@ -256,18 +199,18 @@ fun Route.threadRoutes() {
                     if (commentDoc.exists()) {
                         val comment = commentDoc.toObject(Comment::class.java)
                         if (comment?.createdBy == userEmail) {
-                            commentRef.delete().get() // Wait for delete to complete
-                            call.respond(mapOf("message" to "Comment deleted!", "deletedCommentId" to commentId))
+                            commentRef.delete().get()
+                            call.respond(ApiResponse(success = true, data = mapOf("message" to "Comment deleted!", "deletedCommentId" to commentId)))
                         } else {
-                            call.respond(HttpStatusCode.Forbidden, mapOf("error" to "You are not authorized to delete this comment"))
+                            call.respond(HttpStatusCode.Forbidden, ApiResponse<Unit>(false, error = "You are not authorized to delete this comment"))
                         }
                     } else {
-                        call.respond(HttpStatusCode.NotFound, mapOf("error" to "Comment not found"))
+                        call.respond(HttpStatusCode.NotFound, ApiResponse<Unit>(false, error = "Comment not found"))
                     }
                 } catch (e: Exception) {
-                    call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Failed to delete comment: ${e.message}"))
+                    call.respond(HttpStatusCode.InternalServerError, ApiResponse<Unit>(false, error = "Failed to delete comment: ${e.message}"))
                 }
             }
         }
     }
-} 
+}

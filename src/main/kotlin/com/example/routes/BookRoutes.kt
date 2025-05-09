@@ -2,6 +2,7 @@ package com.example.routes
 
 import com.example.client
 import com.example.models.Book
+import com.example.models.ApiResponse
 import com.google.gson.JsonParser
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
@@ -15,7 +16,10 @@ fun Route.bookRoutes() {
         get("/search") {
             val query = call.request.queryParameters["query"]
             if (query.isNullOrBlank()) {
-                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Missing search query"))
+                call.respond(
+                    HttpStatusCode.BadRequest,
+                    ApiResponse<List<Book>>(success = false, error = "Missing search query")
+                )
                 return@get
             }
 
@@ -41,10 +45,13 @@ fun Route.bookRoutes() {
                     Book(title, authors, thumbnail)
                 }
 
-                call.respond(books)
+                call.respond(ApiResponse(success = true, data = books))
 
             } catch (e: Exception) {
-                call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Google Books API error: ${e.message}"))
+                call.respond(
+                    HttpStatusCode.InternalServerError,
+                    ApiResponse<List<Book>>(success = false, error = "Google Books API error: ${e.message}")
+                )
             }
         }
     }

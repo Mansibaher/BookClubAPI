@@ -2,6 +2,7 @@ package com.example.routes
 
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
+import com.example.models.ApiResponse
 import com.google.firebase.auth.FirebaseAuth
 import io.ktor.http.*
 import io.ktor.server.application.*
@@ -27,9 +28,10 @@ fun Route.authRoutes() {
                         .setEmail(request.email)
                         .setPassword(request.password)
                 )
-                call.respond(mapOf("uid" to user.uid, "email" to user.email))
+                val response = mapOf("uid" to user.uid, "email" to user.email)
+                call.respond(ApiResponse(success = true, data = response))
             } catch (e: Exception) {
-                call.respond(mapOf("error" to e.localizedMessage))
+                call.respond(ApiResponse<Map<String, String>>(success = false, error = e.localizedMessage))
             }
         }
     }
@@ -39,8 +41,6 @@ fun Route.authRoutes() {
             println("🔑 Received POST /login request")
             val request = call.receive<LoginRequest>()
             try {
-                // NOTE: Firebase Admin SDK does not verify password directly
-                // For full verification, Firebase Client SDK is used on the frontend
                 val firebaseToken = FirebaseAuth.getInstance()
                     .createCustomToken(request.email)
 
@@ -49,13 +49,15 @@ fun Route.authRoutes() {
                     .withClaim("email", request.email)
                     .sign(Algorithm.HMAC256(jwtSecret))
 
-                call.respond(mapOf("token" to jwt))
+                val response = mapOf("token" to jwt)
+                call.respond(ApiResponse(success = true, data = response))
             } catch (e: Exception) {
                 call.respond(
                     HttpStatusCode.Unauthorized,
-                    mapOf("error" to "Login failed: ${e.localizedMessage}")
+                    ApiResponse<Map<String, String>>(success = false, error = "Login failed: ${e.localizedMessage}")
                 )
             }
         }
+
     }
 }

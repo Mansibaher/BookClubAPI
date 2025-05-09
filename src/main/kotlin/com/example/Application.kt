@@ -2,7 +2,7 @@ package com.example
 
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
-import com.example.routing.authRoutes
+import com.example.routes.authRoutes
 import com.google.auth.oauth2.GoogleCredentials
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
@@ -18,9 +18,9 @@ import io.ktor.server.auth.jwt.*
 import java.io.FileInputStream
 
 // ✅ Import your route files
-import com.example.clubRoutes
-import com.example.bookRoutes
-import com.example.threadRoutes
+import com.example.routes.clubRoutes
+import com.example.routes.bookRoutes
+import com.example.routes.threadRoutes
 
 fun main() {
     embeddedServer(Netty, port = 8080, host = "0.0.0.0") {

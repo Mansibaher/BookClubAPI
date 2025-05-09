@@ -1,22 +1,25 @@
 package com.example.models
 
+import com.google.cloud.Timestamp
+import com.google.cloud.firestore.annotation.DocumentId
 import java.util.*
 
 data class Thread(
-    val id: String = UUID.randomUUID().toString(),
-    val clubId: String,
-    val title: String,
-    val content: String,
-    val createdBy: String,
-    val createdAt: Date = Date(),
-    val comments: MutableList<Comment> = mutableListOf()
+    @DocumentId
+    val id: String = "",
+    val clubId: String = "",
+    val title: String = "",
+    val content: String = "",
+    val createdBy: String = "",
+    val createdAt: Timestamp = Timestamp.now()
 )
 
 data class Comment(
-    val id: String = UUID.randomUUID().toString(),
-    val content: String,
-    val createdBy: String,
-    val createdAt: Date = Date()
+    @DocumentId
+    val id: String = "",
+    val content: String = "",
+    val createdBy: String = "",
+    val createdAt: Timestamp = Timestamp.now()
 )
 
 data class ThreadRequest(

@@ -1,41 +1,97 @@
-📚 Book Club API
+# 📚 Book Club API
 
-🌟 Introduction
+## 🌟 Introduction
 
 The Book Club API is a Kotlin-based backend application developed using the Ktor framework. It provides functionalities to manage book clubs, user authentication, and book discussions. The API is designed to integrate with Firebase for authentication and data storage, and it leverages JWT for secure API access.
 
+## ✨ Features
 
-✨ Features:
+* 🔑 User Authentication with JWT
+* ☁️ Firebase Integration for data storage
+* 📖 Book Club Management (create, join, leave, delete)
+* 🔍 Book Search using Google Books API
+* 💬 Discussion Threads within Clubs
+* 🔒 Protected Routes for authorized users
 
-🔑 User Authentication with JWT
+## 🛠️ Tech Stack
 
-☁️ Firebase Integration for data storage
+* **Backend:** Kotlin, Ktor
+* **Authentication:** Firebase Auth, JWT
+* **Database:** Firebase Firestore
+* **External APIs:** Google Books API
+* **Build Tool:** Gradle
 
-📖 Book Club Management (create, join, leave, delete)
+## ✅ Prerequisites
 
-🔍 Book Search using Google Books API
+* Java 17+
+* Gradle 8.10+
+* Firebase Service Account Key
 
-💬 Discussion Threads within Clubs
+## 🚀 Installation
 
-🔒 Protected Routes for authorized users
+1. Clone the repository:
 
+   ```bash
+   git clone https://github.com/yourusername/bookclubapi.git
+   ```
+2. Navigate to the project directory:
 
-🛠️ Tech Stack:
+   ```bash
+   cd bookclubapi
+   ```
+3. Configure Firebase credentials:
 
-Backend: Kotlin, Ktor
+   * Place your Firebase service account key as `serviceAccountKey.json` in the root directory.
 
-Authentication: Firebase Auth, JWT
+## ▶️ Running the Application
 
-Database: Firebase Firestore
+1. Run the application using Gradle:
 
-External APIs: Google Books API
+   ```bash
+   ./gradlew run
+   ```
+2. Access the API at:
 
-Build Tool: Gradle
+   ```
+   http://localhost:8080/
+   ```
 
-✅ Prerequisites
+## 🌐 API Endpoints
 
-Java 17+
+### 🌍 Public Endpoints
 
-Gradle 8.10+
+* `GET /` - Health Check
+* `POST /signup` - User Signup
+* `POST /login` - User Login
+* `GET /books/search` - Search Books by Query
 
-Firebase Service Account Key
+### 🔐 Protected Endpoints
+
+* `GET /protected` - Access a protected route
+* `POST /clubs` - Create a new club
+* `POST /clubs/{id}/join` - Join a club
+* `DELETE /clubs/{id}/leave` - Leave a club
+* `PATCH /clubs/{id}/currentBook` - Update current book in a club
+* `DELETE /clubs/{id}` - Delete a club
+* `POST /clubs/{clubId}/threads` - Create a new discussion thread
+* `POST /clubs/{clubId}/threads/{threadId}/comments` - Add a comment to a thread
+
+## 🛑 Error Handling
+
+All API responses follow a structured format:
+
+```
+{
+  "success": true/false,
+  "data": {...},
+  "error": "Error message if any"
+}
+```
+
+## 🤝 Contributing
+
+Contributions are welcome! Please fork the repository and submit a pull request for any improvements.
+
+## 📄 License
+
+This project is licensed under the Apache License 2.0.

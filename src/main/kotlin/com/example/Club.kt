@@ -5,5 +5,8 @@ data class Club(
     val name: String = "",
     val description: String = "",
     val createdBy: String = "",
-    val members: MutableList<String> = mutableListOf()
+    val members: MutableList<String> = mutableListOf(),
+    val currentBook: String? = null
 )
+
+data class CurrentBookRequest(val currentBook: String)

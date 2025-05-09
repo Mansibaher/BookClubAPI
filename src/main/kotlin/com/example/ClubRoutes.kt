@@ -39,7 +39,8 @@ fun Route.clubRoutes() {
                     name = request.name,
                     description = request.description,
                     createdBy = userEmail,
-                    members = mutableListOf(userEmail)
+                    members = mutableListOf(userEmail),
+                    currentBook = request.currentBook
                 )
 
                 val db = FirebaseService.firestoreDb
@@ -148,5 +149,92 @@ fun Route.clubRoutes() {
             }
 
         }
+
+        patch("{id}/currentBook") {
+            val id = call.parameters["id"]
+            print(id)
+            val userEmail = call.principal<JWTPrincipal>()?.payload?.getClaim("email")?.asString()
+
+            if (id.isNullOrBlank()) {
+                return@patch call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Missing club ID"))
+            }
+
+            val db = FirebaseService.firestoreDb
+            val docRef = db.collection("clubs").document(id)
+
+            val snapshot = try {
+                docRef.get().get()
+            } catch (e: Exception) {
+                return@patch call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Failed to fetch club: ${e.message}"))
+            }
+
+            if (!snapshot.exists()) {
+                return@patch call.respond(HttpStatusCode.NotFound, mapOf("error" to "Club not found"))
+            }
+
+            val club = snapshot.toObject(Club::class.java)
+
+            if (club == null) {
+                return@patch call.respond(HttpStatusCode.Forbidden, mapOf("error" to "You must be a member to update the current book"))
+            }
+
+            val request = try {
+                call.receive<CurrentBookRequest>()
+            } catch (e: Exception) {
+                return@patch call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid request body: ${e.message}"))
+            }
+
+            if (request.currentBook.isBlank()) {
+                return@patch call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Current book must not be blank"))
+            }
+
+            try {
+                docRef.update("currentBook", request.currentBook)
+            } catch (e: Exception) {
+                return@patch call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Failed to update book: ${e.message}"))
+            }
+
+            call.respond(mapOf("message" to "Current book updated!", "clubId" to club.id, "currentBook" to request.currentBook))
+        }
+
+        // ✅ Delete currentBook from a club
+        delete("{id}/currentBook") {
+            val id = call.parameters["id"]
+            val userEmail = call.principal<JWTPrincipal>()?.payload?.getClaim("email")?.asString()
+
+            if (id.isNullOrBlank()) {
+                return@delete call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Missing club ID"))
+            }
+
+            val db = FirebaseService.firestoreDb
+            val docRef = db.collection("clubs").document(id)
+
+            val snapshot = try {
+                docRef.get().get()
+            } catch (e: Exception) {
+                return@delete call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Failed to fetch club: ${e.message}"))
+            }
+
+            if (!snapshot.exists()) {
+                return@delete call.respond(HttpStatusCode.NotFound, mapOf("error" to "Club not found"))
+            }
+
+            val club = snapshot.toObject(Club::class.java)
+
+            if (club == null) {
+                return@delete call.respond(HttpStatusCode.Forbidden, mapOf("error" to "You must be a member to delete the current book"))
+            }
+
+            try {
+                docRef.update("currentBook", com.google.cloud.firestore.FieldValue.delete())
+            } catch (e: Exception) {
+                return@delete call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Failed to delete current book: ${e.message}"))
+            }
+
+            call.respond(mapOf("message" to "Current book removed from club", "clubId" to id))
+        }
+
+
+
     }
 }

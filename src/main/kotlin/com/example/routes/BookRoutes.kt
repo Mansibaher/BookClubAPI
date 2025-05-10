@@ -12,25 +12,20 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 
 /**
- * Defines routes for interacting with external book search APIs.
+ * Defining routes for interacting with external book search APIs.
  *
  * Route:
- *   GET /books/search?query=your_query
+ *   GET /books/search?query=your_query&page=1&limit=10
  *     - Calls the Google Books API to fetch book information based on the query.
  *     - Returns a list of simplified Book models.
- *
- * Example request:
- *   GET /books/search?query=Harry+Potter
- *
- * Returns:
- *   - 200 OK with list of books if successful.
- *   - 400 Bad Request if query parameter is missing.
- *   - 500 Internal Server Error if the external API call fails.
  */
 fun Route.bookRoutes() {
     route("/books") {
         get("/search") {
             val query = call.request.queryParameters["query"]
+            val page = call.request.queryParameters["page"]?.toIntOrNull() ?: 1
+            val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 10
+
             if (query.isNullOrBlank()) {
                 call.respond(
                     HttpStatusCode.BadRequest,
@@ -38,19 +33,42 @@ fun Route.bookRoutes() {
                 )
                 return@get
             }
-            // Call Google Books API
+
+            val startIndex = (page - 1) * limit
+
             try {
+                // Calling the Google Books API with pagination parameters
                 val response: HttpResponse = client.get("https://www.googleapis.com/books/v1/volumes") {
                     url {
                         parameters.append("q", query)
-                        parameters.append("maxResults", "10")
+                        parameters.append("maxResults", limit.toString())
+                        parameters.append("startIndex", startIndex.toString())
                     }
                 }
-                // Parse and convert each book entry to our Book model
-                val rawJson = response.bodyAsText()
-                val json = JsonParser.parseString(rawJson).asJsonObject
-                val items = json.getAsJsonArray("items")
 
+                // Reading the raw response
+                val rawJson = response.bodyAsText()
+                
+                if (rawJson.isBlank()) {
+                    call.respond(
+                        HttpStatusCode.InternalServerError,
+                        ApiResponse<List<Book>>(success = false, error = "Empty response from Google Books API")
+                    )
+                    return@get
+                }
+
+                val json = JsonParser.parseString(rawJson).asJsonObject
+
+                if (!json.has("items") || json.getAsJsonArray("items").size() == 0) {
+                    call.respond(
+                        HttpStatusCode.NotFound,
+                        ApiResponse<List<Book>>(success = false, error = "No books found for the given query")
+                    )
+                    return@get
+                }
+
+                // Extracting and converting each book entry to our Book model
+                val items = json.getAsJsonArray("items")
                 val books = items.map { item ->
                     val volumeInfo = item.asJsonObject.getAsJsonObject("volumeInfo")
 
@@ -66,7 +84,7 @@ fun Route.bookRoutes() {
             } catch (e: Exception) {
                 call.respond(
                     HttpStatusCode.InternalServerError,
-                    ApiResponse<List<Book>>(success = false, error = "Google Books API error: ${e.message}")
+                    ApiResponse<List<Book>>(success = false, error = "Google Books API error: ${e.localizedMessage ?: "Unknown error"}")
                 )
             }
         }
